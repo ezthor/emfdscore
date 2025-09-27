@@ -77,6 +77,50 @@ class MoralFrameworkAnalyzer:
             }
         }
     
+    def analyze_file_with_summary(self, 
+                                 file_path: str, 
+                                 dict_type: str = 'emfd',
+                                 prob_map: str = 'all',
+                                 score_method: str = 'bow',
+                                 output_metrics: str = 'sentiment',
+                                 **extraction_kwargs) -> Dict[str, Any]:
+        """
+        Analyze moral frameworks in a document file and include moral summary.
+        This method addresses the KeyError issue by automatically including the moral_summary.
+        
+        Args:
+            file_path: Path to input file (PDF, TXT, etc.)
+            dict_type: Dictionary type ('emfd', 'mfd', 'mfd2')
+            prob_map: Probability mapping ('all', 'single') - only for emfd
+            score_method: Scoring method ('bow', 'wordlist', 'gdelt.ngrams', 'pat')
+            output_metrics: Output metrics ('sentiment', 'vice-virtue') - only for emfd
+            **extraction_kwargs: Additional arguments for text extraction
+            
+        Returns:
+            Dictionary containing analysis results, metadata, and moral summary
+        """
+        # Get basic analysis result
+        result = self.analyze_file(
+            file_path,
+            dict_type=dict_type,
+            prob_map=prob_map,
+            score_method=score_method,
+            output_metrics=output_metrics,
+            **extraction_kwargs
+        )
+        
+        # Add moral summary
+        if result['moral_scores']:
+            result['moral_summary'] = self.get_moral_summary(result['moral_scores'], dict_type)
+        else:
+            result['moral_summary'] = {
+                'dictionary_used': dict_type,
+                'moral_foundations': {},
+                'error': 'No moral scores available'
+            }
+        
+        return result
+    
     def analyze_text(self, 
                     text: str,
                     dict_type: str = 'emfd',
@@ -136,6 +180,54 @@ class MoralFrameworkAnalyzer:
             # Clean up temporary file
             if os.path.exists(tmp_csv_path):
                 os.unlink(tmp_csv_path)
+    
+    def analyze_text_with_summary(self, 
+                                 text: str,
+                                 dict_type: str = 'emfd',
+                                 prob_map: str = 'all',
+                                 score_method: str = 'bow',
+                                 output_metrics: str = 'sentiment') -> Dict[str, Any]:
+        """
+        Analyze moral frameworks in raw text and include moral summary.
+        
+        Args:
+            text: Input text to analyze
+            dict_type: Dictionary type ('emfd', 'mfd', 'mfd2')
+            prob_map: Probability mapping ('all', 'single') - only for emfd
+            score_method: Scoring method ('bow', 'wordlist', 'gdelt.ngrams', 'pat')
+            output_metrics: Output metrics ('sentiment', 'vice-virtue') - only for emfd
+            
+        Returns:
+            Dictionary containing moral framework scores and summary
+        """
+        # Get basic scores
+        moral_scores = self.analyze_text(text, dict_type, prob_map, score_method, output_metrics)
+        
+        # Create result with summary
+        result = {
+            'text': text,
+            'text_length': len(text),
+            'word_count': len(text.split()),
+            'moral_scores': moral_scores,
+            'analysis_parameters': {
+                'dict_type': dict_type,
+                'prob_map': prob_map,
+                'score_method': score_method,
+                'output_metrics': output_metrics
+            }
+        }
+        
+        # Add moral summary
+        if moral_scores:
+            result['moral_summary'] = self.get_moral_summary(moral_scores, dict_type)
+        else:
+            result['moral_summary'] = {
+                'dictionary_used': dict_type,
+                'moral_foundations': {},
+                'error': 'No moral scores available'
+            }
+        
+        return result
     
     def analyze_batch(self, 
                      file_paths: List[str],
@@ -294,6 +386,20 @@ def analyze_file_moral_framework(file_path: str, **kwargs) -> Dict[str, Any]:
     """Analyze moral frameworks in a file (convenience function)."""
     analyzer = MoralFrameworkAnalyzer()
     return analyzer.analyze_file(file_path, **kwargs)
+
+
+def analyze_file_moral_framework_with_summary(file_path: str, **kwargs) -> Dict[str, Any]:
+    """Analyze moral frameworks in a file with summary (convenience function).
+    This function includes the moral_summary to avoid KeyError issues."""
+    analyzer = MoralFrameworkAnalyzer()
+    return analyzer.analyze_file_with_summary(file_path, **kwargs)
+
+
+def analyze_text_moral_framework_with_summary(text: str, **kwargs) -> Dict[str, Any]:
+    """Analyze moral frameworks in text with summary (convenience function).
+    This function includes the moral_summary to avoid KeyError issues."""
+    analyzer = MoralFrameworkAnalyzer()
+    return analyzer.analyze_text_with_summary(text, **kwargs)
 
 
 def analyze_text_moral_framework(text: str, **kwargs) -> Dict[str, Any]:
