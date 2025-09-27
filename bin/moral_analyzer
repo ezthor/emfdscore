@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""
+Enhanced Moral Framework Analyzer
+Supports PDF (with OCR), TXT files and provides comprehensive moral framework analysis.
+"""
+
+import argparse
+import json
+import logging
+import sys
+import os
+from pathlib import Path
+
+# Add the parent directory to Python path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from emfdscore.moral_analysis import MoralFrameworkAnalyzer
+from emfdscore.text_extraction import TextExtractionManager
+
+def setup_logging(verbose: bool = False):
+    """Setup logging configuration."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Enhanced Moral Framework Analyzer with PDF/OCR support',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Analyze a text file
+  %(prog)s input.txt --output results.json
+  
+  # Analyze a PDF file with eMFD dictionary
+  %(prog)s document.pdf --dict-type emfd --prob-map all --output analysis.json
+  
+  # Analyze with different scoring method
+  %(prog)s input.txt --score-method bow --dict-type mfd --output results.json
+  
+  # Show detailed analysis summary
+  %(prog)s input.pdf --show-summary --verbose
+  
+  # Batch process multiple files
+  %(prog)s file1.pdf file2.txt file3.pdf --output batch_results.json
+        """
+    )
+    
+    # Input files
+    parser.add_argument('input_files', nargs='+', 
+                       help='Input file(s) to analyze (PDF, TXT)')
+    
+    # Output options
+    parser.add_argument('-o', '--output', 
+                       help='Output JSON file for results (default: print to stdout)')
+    parser.add_argument('--show-summary', action='store_true',
+                       help='Show human-readable summary of results')
+    
+    # Analysis parameters
+    parser.add_argument('--dict-type', choices=['emfd', 'mfd', 'mfd2'], default='emfd',
+                       help='Dictionary for scoring (default: emfd)')
+    parser.add_argument('--prob-map', choices=['all', 'single'], default='all',
+                       help='Probability mapping for eMFD (default: all)')
+    parser.add_argument('--score-method', choices=['bow', 'wordlist', 'gdelt.ngrams', 'pat'], 
+                       default='bow', help='Scoring method (default: bow)')
+    parser.add_argument('--output-metrics', choices=['sentiment', 'vice-virtue'], 
+                       default='sentiment', help='Output metrics for eMFD (default: sentiment)')
+    
+    # Text extraction options
+    parser.add_argument('--encoding', default='utf-8',
+                       help='Text encoding for TXT files (default: utf-8)')
+    parser.add_argument('--no-ocr', action='store_true',
+                       help='Disable OCR fallback for PDF files')
+    
+    # General options
+    parser.add_argument('-v', '--verbose', action='store_true',
+                       help='Enable verbose logging')
+    parser.add_argument('--list-supported', action='store_true',
+                       help='List supported file extensions and exit')
+    
+    args = parser.parse_args()
+    
+    # Setup logging
+    setup_logging(args.verbose)
+    logger = logging.getLogger(__name__)
+    
+    # List supported extensions if requested
+    if args.list_supported:
+        manager = TextExtractionManager()
+        extensions = manager.get_supported_extensions()
+        print("Supported file extensions:")
+        for ext in sorted(extensions):
+            print(f"  {ext}")
+        return 0
+    
+    # Validate input files
+    for file_path in args.input_files:
+        if not os.path.exists(file_path):
+            logger.error(f"Input file not found: {file_path}")
+            return 1
+    
+    # Initialize analyzer
+    analyzer = MoralFrameworkAnalyzer()
+    
+    # Prepare extraction kwargs
+    extraction_kwargs = {
+        'encoding': args.encoding
+    }
+    
+    try:
+        # Analyze files
+        if len(args.input_files) == 1:
+            # Single file analysis
+            file_path = args.input_files[0]
+            logger.info(f"Analyzing file: {file_path}")
+            
+            result = analyzer.analyze_file(
+                file_path,
+                dict_type=args.dict_type,
+                prob_map=args.prob_map,
+                score_method=args.score_method,
+                output_metrics=args.output_metrics,
+                **extraction_kwargs
+            )
+            
+            # Add summary if requested
+            if args.show_summary:
+                summary = analyzer.get_moral_summary(
+                    result['moral_scores'], 
+                    args.dict_type
+                )
+                result['moral_summary'] = summary
+                
+        else:
+            # Batch analysis
+            logger.info(f"Analyzing {len(args.input_files)} files")
+            
+            results = analyzer.analyze_batch(
+                args.input_files,
+                dict_type=args.dict_type,
+                prob_map=args.prob_map,
+                score_method=args.score_method,
+                output_metrics=args.output_metrics,
+                **extraction_kwargs
+            )
+            
+            # Add summaries if requested
+            if args.show_summary:
+                for result in results:
+                    if 'moral_scores' in result and result['moral_scores']:
+                        summary = analyzer.get_moral_summary(
+                            result['moral_scores'], 
+                            args.dict_type
+                        )
+                        result['moral_summary'] = summary
+            
+            result = {'batch_results': results, 'total_files': len(results)}
+        
+        # Output results
+        if args.output:
+            logger.info(f"Writing results to: {args.output}")
+            with open(args.output, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+            print(f"Results saved to: {args.output}")
+        else:
+            # Print to stdout
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        
+        # Print summary to stderr if requested (so it doesn't interfere with JSON output)
+        if args.show_summary:
+            print_summary(result, args.dict_type)
+            
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+    
+    return 0
+
+
+def print_summary(result, dict_type):
+    """Print human-readable summary to stderr."""
+    import sys
+    
+    def print_to_stderr(*args, **kwargs):
+        print(*args, file=sys.stderr, **kwargs)
+    
+    print_to_stderr("\n" + "="*60)
+    print_to_stderr("MORAL FRAMEWORK ANALYSIS SUMMARY")
+    print_to_stderr("="*60)
+    
+    if 'batch_results' in result:
+        # Batch results
+        print_to_stderr(f"Analyzed {result['total_files']} files")
+        print_to_stderr()
+        
+        for i, file_result in enumerate(result['batch_results'], 1):
+            if 'error' in file_result:
+                print_to_stderr(f"{i}. {file_result['file_path']} - ERROR: {file_result['error']}")
+                continue
+                
+            print_to_stderr(f"{i}. {file_result['file_path']}")
+            if 'moral_summary' in file_result:
+                print_file_summary(file_result, print_to_stderr)
+            print_to_stderr()
+    else:
+        # Single file result
+        print_to_stderr(f"File: {result['file_path']}")
+        print_file_summary(result, print_to_stderr)
+
+
+def print_file_summary(result, print_func):
+    """Print summary for a single file."""
+    if 'text_length' in result:
+        print_func(f"  Text length: {result['text_length']} characters")
+    if 'word_count' in result:
+        print_func(f"  Word count: {result['word_count']} words")
+    
+    if 'moral_summary' in result:
+        summary = result['moral_summary']
+        
+        if 'dominant_foundation' in summary:
+            dominant = summary['dominant_foundation']
+            print_func(f"  Dominant moral foundation: {dominant['name']} ({dominant['probability']:.3f})")
+        
+        if 'moral_density' in summary:
+            density = summary['moral_density']
+            print_func(f"  Moral content density: {density['interpretation']} (ratio: {density['ratio']:.3f})")
+        
+        print_func("  Moral foundations:")
+        for foundation, data in summary['moral_foundations'].items():
+            if 'probability' in data:
+                print_func(f"    {foundation}: {data['probability']:.3f} ({data['strength']})")
+            elif 'score' in data:
+                print_func(f"    {foundation}: {data['score']:.3f} ({data['strength']})")
+
+
+if __name__ == '__main__':
+    sys.exit(main())
