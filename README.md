@@ -1,3 +1,50 @@
+# Windows Quick Start Guide
+
+## 🚀 For Windows Users - Fast Setup
+
+### Option 1: Automated Setup (Recommended)
+1. Download this repository
+2. Open Command Prompt or PowerShell **as Administrator**
+3. Navigate to the emfdscore directory
+4. Run: `start_windows.bat`
+
+The script will automatically create a conda environment named `emfd`, install all dependencies, and handle spaCy model installation issues.
+
+### Option 2: Manual Setup
+
+**⚠️ Conda Environment Warning:** Always create a dedicated conda environment to avoid conflicts with other Python packages.
+
+```cmd
+# Create and activate conda environment
+conda create -n emfd python=3.11 -y
+conda activate emfd
+
+# Install dependencies
+pip install pandas progressbar2 nltk numpy spacy scikit-learn pdfplumber PyPDF2
+
+# Install eMFDscore
+pip install -e .
+
+# Install spaCy model (if this fails, see WINDOWS_SETUP.md for troubleshooting)
+python -m spacy download en_core_web_sm
+```
+
+### Quick Usage
+```cmd
+# Activate environment
+conda activate emfd
+
+# Analyze a text file
+python bin\moral_analyzer input.txt --show-summary
+
+# Analyze a PDF file  
+python bin\moral_analyzer document.pdf --output results.json
+```
+
+**For detailed Windows troubleshooting and advanced usage, see [WINDOWS_SETUP.md](WINDOWS_SETUP.md)**
+
+---
+
 ## eMFDscore: Extended Moral Foundation Dictionary Scoring for Python 
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-1f425f.svg)](https://www.python.org/) [![Open Source Love png2](https://badges.frapsoft.com/os/v2/open-source.png?v=103)](https://github.com/ellerbrock/open-source-badges/)
 
